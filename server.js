@@ -109,6 +109,13 @@ if (!existingAdmin) {
         adminEmail,
         bcrypt.hashSync(initialPassword, 12)
     );
+} else {
+    // Keep the stored admin email synchronized with ADMIN_EMAIL.
+    db.prepare(
+        `UPDATE admin_account
+         SET email=?
+         WHERE id=1`
+    ).run(adminEmail);
 }
 
 
@@ -762,13 +769,11 @@ app.post(
                 account.email;
 
 
-            return res.render(
-                'forgot-password',
-                {
-                    error: null,
-                    message:
-                        'Verification code sent. Check your email.'
-                }
+            // IMPORTANT:
+            // Go to the page where the 6-digit
+            // verification code can be entered.
+            return res.redirect(
+                '/admin/verify-code'
             );
 
         } catch (error) {
