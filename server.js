@@ -8,14 +8,14 @@ const session = require('express-session');
 const multer = require('multer');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcryptjs');
-const nodemailer = require('nodemailer');
 
 const app = express();
+
 app.set('trust proxy', 1);
+
 const PORT = process.env.PORT || 3000;
 const ROOT = __dirname;
 
-// Use DATA_ROOT when you later add persistent storage on Render.
 const DATA_ROOT = process.env.DATA_ROOT || ROOT;
 
 const dataDir = path.join(DATA_ROOT, 'data');
@@ -27,6 +27,7 @@ fs.mkdirSync(uploadDir, { recursive: true });
 const db = new Database(path.join(dataDir, 'site.db'));
 
 db.pragma('journal_mode=WAL');
+
 
 /* =========================================================
    DATABASE TABLES
@@ -76,33 +77,40 @@ CREATE TABLE IF NOT EXISTS password_resets(
 );
 `);
 
+
 /* =========================================================
    ADMIN ACCOUNT
 ========================================================= */
 
 const adminEmail =
-    String(process.env.ADMIN_EMAIL || 'angelacartex@gmail.com')
-        .trim()
-        .toLowerCase();
+    String(
+        process.env.ADMIN_EMAIL ||
+        'fomagionoubosse@gmail.com'
+    )
+    .trim()
+    .toLowerCase();
 
 const initialPassword =
-    String(process.env.ADMIN_PASSWORD || 'change-this-password');
+    String(
+        process.env.ADMIN_PASSWORD ||
+        'change-this-password'
+    );
 
-/*
-   Create the admin account if it doesn't exist.
-*/
 const existingAdmin = db
     .prepare('SELECT * FROM admin_account WHERE id=1')
     .get();
 
 if (!existingAdmin) {
     db.prepare(
-        'INSERT INTO admin_account(id,email,password_hash) VALUES(1,?,?)'
+        `INSERT INTO admin_account
+        (id,email,password_hash)
+        VALUES(1,?,?)`
     ).run(
         adminEmail,
         bcrypt.hashSync(initialPassword, 12)
     );
 }
+
 
 /* =========================================================
    DEFAULT WEBSITE CONTENT
@@ -113,17 +121,27 @@ if (!existingAdmin) {
     ['about', 'About section image']
 ].forEach(item => {
     db.prepare(
-        'INSERT OR IGNORE INTO site_images(slot,label,image) VALUES(?,?,?)'
-    ).run(item[0], item[1], '');
+        `INSERT OR IGNORE INTO site_images
+        (slot,label,image)
+        VALUES(?,?,?)`
+    ).run(
+        item[0],
+        item[1],
+        ''
+    );
 });
+
 
 const processCount = db
     .prepare('SELECT COUNT(*) c FROM process_steps')
     .get().c;
 
 if (!processCount) {
+
     const q = db.prepare(
-        'INSERT INTO process_steps(step_number,title,description) VALUES(?,?,?)'
+        `INSERT INTO process_steps
+        (step_number,title,description)
+        VALUES(?,?,?)`
     );
 
     q.run(
@@ -145,13 +163,17 @@ if (!processCount) {
     );
 }
 
+
 const puppyCount = db
     .prepare('SELECT COUNT(*) c FROM puppies')
     .get().c;
 
 if (!puppyCount) {
+
     const q = db.prepare(
-        'INSERT INTO puppies(name,gender,age,price,status,description,image) VALUES(?,?,?,?,?,?,?)'
+        `INSERT INTO puppies
+        (name,gender,age,price,status,description,image)
+        VALUES(?,?,?,?,?,?,?)`
     );
 
     q.run(
@@ -175,18 +197,37 @@ if (!puppyCount) {
     );
 }
 
+
 /* =========================================================
    EXPRESS SETTINGS
 ========================================================= */
 
 app.set('view engine', 'ejs');
-app.set('views', path.join(ROOT, 'views'));
 
-app.use(express.urlencoded({ extended: true }));
+app.set(
+    'views',
+    path.join(ROOT, 'views')
+);
+
+app.use(
+    express.urlencoded({
+        extended: true
+    })
+);
+
 app.use(express.json());
 
-app.use(express.static(path.join(ROOT, 'public')));
-app.use('/uploads', express.static(uploadDir));
+app.use(
+    express.static(
+        path.join(ROOT, 'public')
+    )
+);
+
+app.use(
+    '/uploads',
+    express.static(uploadDir)
+);
+
 
 /* =========================================================
    SESSION
@@ -205,31 +246,39 @@ app.use(
         cookie: {
             httpOnly: true,
             sameSite: 'lax',
-            secure: process.env.NODE_ENV === 'production',
+            secure:
+                process.env.NODE_ENV === 'production',
             maxAge: 14400000
         }
     })
 );
+
 
 /* =========================================================
    IMAGE UPLOAD
 ========================================================= */
 
 const upload = multer({
+
     storage: multer.diskStorage({
+
         destination: (_, __, cb) => {
             cb(null, uploadDir);
         },
 
         filename: (_, file, cb) => {
-            const extension = path
-                .extname(file.originalname)
-                .toLowerCase();
+
+            const extension =
+                path
+                    .extname(file.originalname)
+                    .toLowerCase();
 
             const filename =
                 Date.now() +
                 '-' +
-                crypto.randomBytes(6).toString('hex') +
+                crypto
+                    .randomBytes(6)
+                    .toString('hex') +
                 extension;
 
             cb(null, filename);
@@ -241,10 +290,10 @@ const upload = multer({
     },
 
     fileFilter: (_, file, cb) => {
+
         if (
-            /^image\/(jpeg|png|webp|gif)$/.test(
-                file.mimetype
-            )
+            /^image\/(jpeg|png|webp|gif)$/
+            .test(file.mimetype)
         ) {
             cb(null, true);
         } else {
@@ -257,11 +306,13 @@ const upload = multer({
     }
 });
 
+
 /* =========================================================
    HELPERS
 ========================================================= */
 
 const admin = (req, res, next) => {
+
     if (req.session.admin) {
         return next();
     }
@@ -269,62 +320,124 @@ const admin = (req, res, next) => {
     return res.redirect('/admin/login');
 };
 
+
 const getAdmin = () => {
+
     return db
-        .prepare('SELECT * FROM admin_account WHERE id=1')
+        .prepare(
+            'SELECT * FROM admin_account WHERE id=1'
+        )
         .get();
 };
 
-const mailer = () => {
-    if (
-        !process.env.SMTP_HOST ||
-        !process.env.SMTP_USER ||
-        !process.env.SMTP_PASS
-    ) {
-        return null;
+
+/* =========================================================
+   RESEND EMAIL
+========================================================= */
+
+const sendPasswordResetEmail = async ({
+    to,
+    code
+}) => {
+
+    const apiKey =
+        String(
+            process.env.RESEND_API_KEY || ''
+        ).trim();
+
+    if (!apiKey) {
+        throw new Error(
+            'RESEND_API_KEY is not configured.'
+        );
     }
 
-    return nodemailer.createTransport({
-        host: process.env.SMTP_HOST,
+    const from =
+        String(
+            process.env.RESEND_FROM ||
+            'Sherill Kay <onboarding@resend.dev>'
+        ).trim();
 
-        port: Number(
-            process.env.SMTP_PORT || 587
-        ),
+    const response = await fetch(
+        'https://api.resend.com/emails',
+        {
+            method: 'POST',
 
-        secure:
-            String(process.env.SMTP_SECURE) === 'true',
+            headers: {
+                'Authorization':
+                    `Bearer ${apiKey}`,
 
-        auth: {
-            user: process.env.SMTP_USER,
-            pass: process.env.SMTP_PASS
+                'Content-Type':
+                    'application/json'
+            },
+
+            body: JSON.stringify({
+
+                from: from,
+
+                to: [to],
+
+                subject:
+                    'Admin password reset code',
+
+                text:
+                    `Your verification code is ${code}. ` +
+                    `It expires in 10 minutes.`
+            })
         }
-    });
+    );
+
+    const data =
+        await response
+            .json()
+            .catch(() => ({}));
+
+    if (!response.ok) {
+
+        throw new Error(
+            data?.message ||
+            data?.error ||
+            `Resend API returned HTTP ${response.status}`
+        );
+    }
+
+    return data;
 };
+
 
 /* =========================================================
    HOMEPAGE
 ========================================================= */
 
 app.get('/', (req, res) => {
+
     const puppies = db
         .prepare(
-            "SELECT * FROM puppies WHERE status!='Adopted' ORDER BY id DESC"
+            `SELECT *
+             FROM puppies
+             WHERE status!='Adopted'
+             ORDER BY id DESC`
         )
         .all();
 
-    const images = Object.fromEntries(
-        db
-            .prepare(
-                'SELECT slot,image FROM site_images'
-            )
-            .all()
-            .map(item => [
-                item.slot,
-                item.image
-                    ? '/uploads/' + item.image
-                    : ''
-            ])
-    );
+
+    const images =
+        Object.fromEntries(
+
+            db
+                .prepare(
+                    'SELECT slot,image FROM site_images'
+                )
+                .all()
+
+                .map(item => [
+                    item.slot,
+
+                    item.image
+                        ? '/uploads/' + item.image
+                        : ''
+                ])
+        );
+
 
     const processSteps = db
         .prepare(
@@ -332,142 +445,183 @@ app.get('/', (req, res) => {
         )
         .all();
 
-    res.render('index', {
-        puppies,
-        images,
-        processSteps
-    });
+
+    res.render(
+        'index',
+        {
+            puppies,
+            images,
+            processSteps
+        }
+    );
 });
+
 
 /* =========================================================
    INDIVIDUAL PUPPY
 ========================================================= */
 
 app.get('/puppy/:id', (req, res) => {
+
     const puppy = db
         .prepare(
             'SELECT * FROM puppies WHERE id=?'
         )
         .get(req.params.id);
 
+
     if (!puppy) {
+
         return res
             .status(404)
             .send('Puppy not found');
     }
 
-    res.render('puppy', {
-        puppy
-    });
+
+    res.render(
+        'puppy',
+        {
+            puppy
+        }
+    );
 });
+
 
 /* =========================================================
    ADMIN LOGIN PAGE
 ========================================================= */
 
-app.get('/admin/login', (req, res) => {
-    res.render('login', {
-        error: null,
-        message: null
-    });
-});
+app.get(
+    '/admin/login',
+    (req, res) => {
+
+        res.render(
+            'login',
+            {
+                error: null,
+                message: null
+            }
+        );
+    }
+);
+
 
 /* =========================================================
    ADMIN LOGIN
 ========================================================= */
 
-app.post('/admin/login', (req, res) => {
+app.post(
+    '/admin/login',
+    (req, res) => {
 
-    const email = String(
-        req.body.email || ''
-    )
-        .trim()
-        .toLowerCase();
-
-    const password = String(
-        req.body.password || ''
-    );
-
-    const account = getAdmin();
-
-    if (!account) {
-        return res.status(500).render('login', {
-            error: 'Admin account is not configured.',
-            message: null
-        });
-    }
-
-    /*
-       First check the credentials stored in the database.
-    */
-
-    const databaseEmailMatches =
-        email ===
-        String(account.email || '')
+        const email =
+            String(
+                req.body.email || ''
+            )
             .trim()
             .toLowerCase();
 
-    const databasePasswordMatches =
-        bcrypt.compareSync(
-            password,
-            account.password_hash
-        );
 
-    /*
-       Also check the current Render environment variables.
+        const password =
+            String(
+                req.body.password || ''
+            );
 
-       This is useful when the Render environment variables
-       were changed after the SQLite database was created.
-    */
 
-    const renderEmailMatches =
-        email === adminEmail;
+        const account = getAdmin();
 
-    const renderPasswordMatches =
-        password === initialPassword;
 
-    const validDatabaseLogin =
-        databaseEmailMatches &&
-        databasePasswordMatches;
+        if (!account) {
 
-    const validRenderLogin =
-        renderEmailMatches &&
-        renderPasswordMatches;
+            return res
+                .status(500)
+                .render(
+                    'login',
+                    {
+                        error:
+                            'Admin account is not configured.',
+                        message: null
+                    }
+                );
+        }
 
-    if (
-        !validDatabaseLogin &&
-        !validRenderLogin
-    ) {
-        return res.status(401).render('login', {
-            error: 'Incorrect email or password.',
-            message: null
-        });
+
+        const databaseEmailMatches =
+            email ===
+            String(account.email || '')
+                .trim()
+                .toLowerCase();
+
+
+        const databasePasswordMatches =
+            bcrypt.compareSync(
+                password,
+                account.password_hash
+            );
+
+
+        const renderEmailMatches =
+            email === adminEmail;
+
+
+        const renderPasswordMatches =
+            password === initialPassword;
+
+
+        const validDatabaseLogin =
+            databaseEmailMatches &&
+            databasePasswordMatches;
+
+
+        const validRenderLogin =
+            renderEmailMatches &&
+            renderPasswordMatches;
+
+
+        if (
+            !validDatabaseLogin &&
+            !validRenderLogin
+        ) {
+
+            return res
+                .status(401)
+                .render(
+                    'login',
+                    {
+                        error:
+                            'Incorrect email or password.',
+                        message: null
+                    }
+                );
+        }
+
+
+        if (
+            validRenderLogin &&
+            !validDatabaseLogin
+        ) {
+
+            db.prepare(
+                `UPDATE admin_account
+                 SET email=?,
+                     password_hash=?
+                 WHERE id=1`
+            ).run(
+                adminEmail,
+                bcrypt.hashSync(
+                    initialPassword,
+                    12
+                )
+            );
+        }
+
+
+        req.session.admin = true;
+
+        return res.redirect('/admin');
     }
+);
 
-    /*
-       If the Render credentials were used successfully,
-       synchronize them into the database.
-
-       This means future logins will use the same credentials
-       stored permanently in the admin account.
-    */
-
-    if (
-        validRenderLogin &&
-        !validDatabaseLogin
-    ) {
-        db.prepare(
-            'UPDATE admin_account SET email=?, password_hash=? WHERE id=1'
-        ).run(
-            adminEmail,
-            bcrypt.hashSync(initialPassword, 12)
-        );
-    }
-
-    req.session.admin = true;
-
-    return res.redirect('/admin');
-});
 
 /* =========================================================
    LOGOUT
@@ -477,11 +631,15 @@ app.post(
     '/admin/logout',
     admin,
     (req, res) => {
-        req.session.destroy(() => {
-            res.redirect('/');
-        });
+
+        req.session.destroy(
+            () => {
+                res.redirect('/');
+            }
+        );
     }
 );
+
 
 /* =========================================================
    FORGOT PASSWORD PAGE
@@ -490,12 +648,17 @@ app.post(
 app.get(
     '/admin/forgot-password',
     (req, res) => {
-        res.render('forgot-password', {
-            error: null,
-            message: null
-        });
+
+        res.render(
+            'forgot-password',
+            {
+                error: null,
+                message: null
+            }
+        );
     }
 );
+
 
 /* =========================================================
    FORGOT PASSWORD
@@ -505,23 +668,29 @@ app.post(
     '/admin/forgot-password',
     async (req, res) => {
 
-        const email = String(
-            req.body.email || ''
-        )
+        const email =
+            String(
+                req.body.email || ''
+            )
             .trim()
             .toLowerCase();
 
+
         const account = getAdmin();
+
 
         const genericMessage =
             'If that email is registered, a verification code has been sent.';
 
+
         if (
             !account ||
             email !==
-                account.email
+                String(account.email || '')
+                    .trim()
                     .toLowerCase()
         ) {
+
             return res.render(
                 'forgot-password',
                 {
@@ -531,25 +700,28 @@ app.post(
             );
         }
 
-        const mail = mailer();
 
-        if (!mail) {
+        if (!process.env.RESEND_API_KEY) {
+
             return res.render(
                 'forgot-password',
                 {
                     error:
-                        'Email delivery is not configured. Add the SMTP variables in Render.',
+                        'Email delivery is not configured. Add RESEND_API_KEY in Render.',
                     message: null
                 }
             );
         }
 
-        const code = String(
-            crypto.randomInt(
-                100000,
-                1000000
-            )
-        );
+
+        const code =
+            String(
+                crypto.randomInt(
+                    100000,
+                    1000000
+                )
+            );
+
 
         const codeHash =
             crypto
@@ -557,9 +729,14 @@ app.post(
                 .update(code)
                 .digest('hex');
 
+
         db.prepare(
-            'UPDATE password_resets SET used=1 WHERE email=? AND used=0'
+            `UPDATE password_resets
+             SET used=1
+             WHERE email=?
+             AND used=0`
         ).run(account.email);
+
 
         db.prepare(
             `INSERT INTO password_resets
@@ -572,31 +749,25 @@ app.post(
             Date.now()
         );
 
+
         try {
 
-            await mail.sendMail({
-                from:
-                    process.env.SMTP_FROM ||
-                    process.env.SMTP_USER,
-
+            await sendPasswordResetEmail({
                 to: account.email,
-
-                subject:
-                    'Admin password reset code',
-
-                text:
-                    `Your verification code is ${code}. ` +
-                    `It expires in 10 minutes.`
+                code: code
             });
+
 
             req.session.resetEmail =
                 account.email;
+
 
             return res.render(
                 'forgot-password',
                 {
                     error: null,
-                    message: genericMessage
+                    message:
+                        'Verification code sent. Check your email.'
                 }
             );
 
@@ -607,17 +778,19 @@ app.post(
                 error
             );
 
+
             return res.render(
                 'forgot-password',
                 {
                     error:
-                        'The verification email could not be sent. Check your SMTP settings.',
+                        'The verification email could not be sent. Check your Resend configuration.',
                     message: null
                 }
             );
         }
     }
 );
+
 
 /* =========================================================
    VERIFY CODE PAGE
@@ -628,16 +801,22 @@ app.get(
     (req, res) => {
 
         if (!req.session.resetEmail) {
+
             return res.redirect(
                 '/admin/forgot-password'
             );
         }
 
-        res.render('verify-code', {
-            error: null
-        });
+
+        res.render(
+            'verify-code',
+            {
+                error: null
+            }
+        );
     }
 );
+
 
 /* =========================================================
    VERIFY CODE
@@ -648,14 +827,17 @@ app.post(
     (req, res) => {
 
         if (!req.session.resetEmail) {
+
             return res.redirect(
                 '/admin/forgot-password'
             );
         }
 
+
         const reset = db
             .prepare(
-                `SELECT * FROM password_resets
+                `SELECT *
+                 FROM password_resets
                  WHERE email=?
                  AND used=0
                  ORDER BY id DESC
@@ -664,6 +846,7 @@ app.post(
             .get(
                 req.session.resetEmail
             );
+
 
         const hash =
             crypto
@@ -675,6 +858,7 @@ app.post(
                 )
                 .digest('hex');
 
+
         if (
             !reset ||
             Date.now() >
@@ -684,30 +868,43 @@ app.post(
         ) {
 
             if (reset) {
+
                 db.prepare(
-                    'UPDATE password_resets SET attempts=attempts+1 WHERE id=?'
+                    `UPDATE password_resets
+                     SET attempts=attempts+1
+                     WHERE id=?`
                 ).run(reset.id);
             }
 
+
             return res
                 .status(400)
-                .render('verify-code', {
-                    error:
-                        'Invalid or expired verification code.'
-                });
+                .render(
+                    'verify-code',
+                    {
+                        error:
+                            'Invalid or expired verification code.'
+                    }
+                );
         }
 
+
         db.prepare(
-            'UPDATE password_resets SET used=1 WHERE id=?'
+            `UPDATE password_resets
+             SET used=1
+             WHERE id=?`
         ).run(reset.id);
 
+
         req.session.resetVerified = true;
+
 
         return res.redirect(
             '/admin/reset-password'
         );
     }
 );
+
 
 /* =========================================================
    RESET PASSWORD PAGE
@@ -718,16 +915,22 @@ app.get(
     (req, res) => {
 
         if (!req.session.resetVerified) {
+
             return res.redirect(
                 '/admin/forgot-password'
             );
         }
 
-        res.render('reset-password', {
-            error: null
-        });
+
+        res.render(
+            'reset-password',
+            {
+                error: null
+            }
+        );
     }
 );
+
 
 /* =========================================================
    RESET PASSWORD
@@ -738,39 +941,57 @@ app.post(
     (req, res) => {
 
         if (!req.session.resetVerified) {
+
             return res.redirect(
                 '/admin/forgot-password'
             );
         }
 
-        const password = String(
-            req.body.password || ''
-        );
 
-        const confirmation = String(
-            req.body.confirm || ''
-        );
+        const password =
+            String(
+                req.body.password || ''
+            );
+
+
+        const confirmation =
+            String(
+                req.body.confirm || ''
+            );
+
 
         if (password.length < 10) {
+
             return res
                 .status(400)
-                .render('reset-password', {
-                    error:
-                        'Password must be at least 10 characters.'
-                });
+                .render(
+                    'reset-password',
+                    {
+                        error:
+                            'Password must be at least 10 characters.'
+                    }
+                );
         }
+
 
         if (password !== confirmation) {
+
             return res
                 .status(400)
-                .render('reset-password', {
-                    error:
-                        'Passwords do not match.'
-                });
+                .render(
+                    'reset-password',
+                    {
+                        error:
+                            'Passwords do not match.'
+                    }
+                );
         }
 
+
         db.prepare(
-            'UPDATE admin_account SET password_hash=? WHERE id=1'
+            `UPDATE admin_account
+             SET password_hash=?
+             WHERE id=1`
         ).run(
             bcrypt.hashSync(
                 password,
@@ -778,16 +999,24 @@ app.post(
             )
         );
 
+
         delete req.session.resetEmail;
+
         delete req.session.resetVerified;
 
-        return res.render('login', {
-            error: null,
-            message:
-                'Password reset successfully. You can now log in.'
-        });
+
+        return res.render(
+            'login',
+            {
+                error: null,
+
+                message:
+                    'Password reset successfully. You can now log in.'
+            }
+        );
     }
 );
+
 
 /* =========================================================
    ADMIN DASHBOARD
@@ -798,33 +1027,40 @@ app.get(
     admin,
     (req, res) => {
 
-        res.render('admin', {
-            puppies: db
-                .prepare(
-                    'SELECT * FROM puppies ORDER BY id DESC'
-                )
-                .all(),
+        res.render(
+            'admin',
+            {
+                puppies:
+                    db
+                        .prepare(
+                            'SELECT * FROM puppies ORDER BY id DESC'
+                        )
+                        .all(),
 
-            images: db
-                .prepare(
-                    'SELECT * FROM site_images ORDER BY id'
-                )
-                .all(),
+                images:
+                    db
+                        .prepare(
+                            'SELECT * FROM site_images ORDER BY id'
+                        )
+                        .all(),
 
-            processSteps: db
-                .prepare(
-                    'SELECT * FROM process_steps ORDER BY id'
-                )
-                .all(),
+                processSteps:
+                    db
+                        .prepare(
+                            'SELECT * FROM process_steps ORDER BY id'
+                        )
+                        .all(),
 
-            adminEmail:
-                getAdmin().email,
+                adminEmail:
+                    getAdmin().email,
 
-            message:
-                req.query.message || ''
-        });
+                message:
+                    req.query.message || ''
+            }
+        );
     }
 );
+
 
 /* =========================================================
    ADD PUPPY
@@ -842,10 +1078,12 @@ app.post(
             !req.body.age ||
             !req.body.price
         ) {
+
             return res.redirect(
                 '/admin?message=Please+fill+all+required+fields'
             );
         }
+
 
         db.prepare(
             `INSERT INTO puppies
@@ -860,14 +1098,17 @@ app.post(
                 'Available',
             req.body.description ||
                 '',
-            req.file?.filename || ''
+            req.file?.filename ||
+                ''
         );
+
 
         return res.redirect(
             '/admin?message=Puppy+added'
         );
     }
 );
+
 
 /* =========================================================
    EDIT PUPPY
@@ -885,15 +1126,19 @@ app.post(
             )
             .get(req.params.id);
 
+
         if (!old) {
+
             return res.redirect(
                 '/admin?message=Puppy+not+found'
             );
         }
 
+
         const image =
             req.file?.filename ||
             old.image;
+
 
         db.prepare(
             `UPDATE puppies
@@ -917,10 +1162,12 @@ app.post(
             req.params.id
         );
 
+
         if (
             req.file?.filename &&
             old.image
         ) {
+
             fs.rm(
                 path.join(
                     uploadDir,
@@ -933,11 +1180,13 @@ app.post(
             );
         }
 
+
         return res.redirect(
             '/admin?message=Puppy+updated'
         );
     }
 );
+
 
 /* =========================================================
    DELETE PUPPY
@@ -954,11 +1203,14 @@ app.post(
             )
             .get(req.params.id);
 
+
         db.prepare(
             'DELETE FROM puppies WHERE id=?'
         ).run(req.params.id);
 
+
         if (puppy?.image) {
+
             fs.rm(
                 path.join(
                     uploadDir,
@@ -971,11 +1223,13 @@ app.post(
             );
         }
 
+
         return res.redirect(
             '/admin?message=Puppy+deleted'
         );
     }
 );
+
 
 /* =========================================================
    UPDATE WEBSITE IMAGE
@@ -988,10 +1242,12 @@ app.post(
     (req, res) => {
 
         if (!req.file) {
+
             return res.redirect(
                 '/admin?message=Please+choose+an+image'
             );
         }
+
 
         const old = db
             .prepare(
@@ -999,14 +1255,19 @@ app.post(
             )
             .get(req.params.slot);
 
+
         db.prepare(
-            'UPDATE site_images SET image=? WHERE slot=?'
+            `UPDATE site_images
+             SET image=?
+             WHERE slot=?`
         ).run(
             req.file.filename,
             req.params.slot
         );
 
+
         if (old?.image) {
+
             fs.rm(
                 path.join(
                     uploadDir,
@@ -1019,11 +1280,13 @@ app.post(
             );
         }
 
+
         return res.redirect(
             '/admin?message=Website+image+updated'
         );
     }
 );
+
 
 /* =========================================================
    UPDATE ADOPTION PROCESS
@@ -1034,11 +1297,17 @@ app.post(
     admin,
     (req, res) => {
 
-        const update = db.prepare(
-            'UPDATE process_steps SET title=?,description=? WHERE id=?'
-        );
+        const update =
+            db.prepare(
+                `UPDATE process_steps
+                 SET title=?,
+                     description=?
+                 WHERE id=?`
+            );
+
 
         for (let i = 1; i <= 3; i++) {
+
             update.run(
                 req.body['title' + i],
                 req.body['description' + i],
@@ -1046,11 +1315,13 @@ app.post(
             );
         }
 
+
         return res.redirect(
             '/admin?message=Adoption+process+updated'
         );
     }
 );
+
 
 /* =========================================================
    ERROR HANDLER
@@ -1063,13 +1334,19 @@ app.use(
             return next();
         }
 
+
         console.error(err);
+
 
         return res
             .status(400)
             .send(`
                 <h1>Upload error</h1>
-                <p>${String(err.message)}</p>
+
+                <p>
+                    ${String(err.message)}
+                </p>
+
                 <p>
                     <a href="/admin">
                         Back to admin
@@ -1079,6 +1356,7 @@ app.use(
     }
 );
 
+
 /* =========================================================
    START SERVER
 ========================================================= */
@@ -1086,6 +1364,7 @@ app.use(
 app.listen(
     PORT,
     () => {
+
         console.log(
             `Sherill Kay Golden Retriever site running on port ${PORT}`
         );
